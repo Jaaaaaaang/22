@@ -1,0 +1,4 @@
+data/
+__pycache__/
+*.pyc
+out/diag_after_trucks.csv
