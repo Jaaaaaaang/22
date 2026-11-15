@@ -1,0 +1,51 @@
+{
+ "N_RUN": 30,
+ "CAP": 2,
+ "P": 0.5,
+ "WINDOW": "c01",
+ "QMODE": "gbr",
+ "GEN": "day",
+ "HIT": 0.8,
+ "FA": 0.05,
+ "PH": 1.0,
+ "PH_LOGIT": 0.44857458528347205,
+ "SW": 0.14285714285714285,
+ "QHOT": 0.18181818181818182,
+ "MAT": 1.75,
+ "PROC_MED": 7.0,
+ "THR": 0.6587247152798915,
+ "STAT": {
+  "B-Flow 전체": {
+   "OPTIMAL": 2232,
+   "INFEASIBLE": 25,
+   "FEASIBLE": 11
+  },
+  "전체-②": {
+   "OPTIMAL": 2229,
+   "INFEASIBLE": 25,
+   "FEASIBLE": 14
+  },
+  "전체-③": {
+   "OPTIMAL": 2248,
+   "FEASIBLE": 20
+  },
+  "전체-④": {
+   "OPTIMAL": 2278
+  }
+ },
+ "assumptions": {
+  "GATE": 3,
+  "LAG": 5,
+  "B4_MOVE": 3,
+  "REL": 5,
+  "STAY": [
+   1,
+   2,
+   3
+  ],
+  "B3_AREA": 80,
+  "B4_AREA": 200,
+  "LOAD_AREA": 20,
+  "ICE_MIN": 120
+ }
+}
