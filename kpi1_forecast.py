@@ -11,15 +11,18 @@
  · 조치 소요: '완료 건은 2.2일 안에, 아니면 10/31까지 미완료'라는 10월 패턴을 그대로 연장(3일 내 조치율 + 미조치 잔량)."""
 import os, json
 import numpy as np, pandas as pd, warnings
+import assumptions as ASM
+from kpi_spec import header
 warnings.filterwarnings("ignore")
 E = os.environ.get
 D = "data/"; N_SIM = int(E("N_SIM", 4000)); START = E("START", "2026-10-05"); QUEUE_EL = float(E("QUEUE_EL", 1)); WINTER_UP = float(E("WINTER_UP", 0))
 TAG = E("TAG", "main"); SEED = int(E("SEED", 20261115)); ASOF = pd.Timestamp("2026-10-31 17:00")
-BETA_MU, BETA_SD = 0.52, 0.47            # 노출 탄력성(kpi1 분석: A,C,D 구역·일 단위 포아송 회귀, n=69, p=0.27)
-R_SC = {"낮음 25%": 0.25, "중간 50%": 0.50, "높음 75%": 0.75}
-HOL = {pd.Timestamp("2026-12-25"), pd.Timestamp("2027-01-01")}
-BM = {"A": "1동", "C": "포디움", "D": "2동"}
+BETA_MU, BETA_SD = ASM.BETA_INC, ASM.BETA_INC_SD   # 노출 탄력성(assumptions A13: kpi1 분석 A,C,D 구역·일 포아송, n=69, p=0.27)
+R_SC = ASM.R_SC
+HOL = {pd.Timestamp(x) for x in ASM.HOLIDAYS}
+BM = ASM.BM
 rng = np.random.default_rng(SEED)
+print(header("KPI1"))
 pd.set_option("display.width", 250); pd.set_option("display.max_columns", 60); pd.set_option("display.max_rows", 200)
 qs = lambda x, ax=0: (np.mean(x, ax), np.percentile(x, 10, ax), np.percentile(x, 90, ax))
 

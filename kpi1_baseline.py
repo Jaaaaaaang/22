@@ -1,6 +1,7 @@
 """KPI 1: 적치장·통로의 지적(09)·아차사고(10) 발생빈도와 조치 소요일 — 10월 기준값과 '후' 값 산출 가능성 확인.
 실행: python3 kpi1_baseline.py"""
 import pandas as pd, numpy as np, warnings
+import assumptions as ASM
 warnings.filterwarnings("ignore")
 pd.set_option("display.width", 250); pd.set_option("display.max_columns", 40); pd.set_option("display.max_rows", 200)
 D = "data/"; ASOF = pd.Timestamp("2026-10-31 17:00")          # 분석 기준일(과제안내서) 작업 종료 시각
@@ -69,10 +70,11 @@ for c in ("Gate_In_Time", "Gate_Out_Time", "Reserved_Start", "Arrival_Time"): g[
 day = pd.DataFrame(index=DAYS)
 day["D자재 반입"] = g[g.Final_Target_Zone == "D"].groupby("Date").size().reindex(DAYS, fill_value=0)
 day["전체 반입"] = g.groupby("Date").size().reindex(DAYS, fill_value=0)
-st = np.zeros(ND)                                   # B3 적치 물량: 시뮬레이션과 같은 가정(적치 1~3 작업일, 평균 2일)을 10월에 적용
+st = np.zeros(ND)                                   # B3 적치 물량: 시뮬레이션과 같은 가정(assumptions.STAY, 평균 1.25 작업일)의 기댓값을 10월에 적용
 for k, d_ in enumerate(DAYS):
-    for s in range(k, min(k + 2, ND)): st[s] += day["D자재 반입"].iloc[k]
-day["B3 적치 물량(가정: 2작업일 체류)"] = st
+    for j in range(0, max(ASM.STAY)):
+        if k + j < ND: st[k + j] += day["D자재 반입"].iloc[k] * np.mean([x > j for x in ASM.STAY])   # 체류 분포(assumptions.STAY)의 기댓값
+day["B3 적치 물량(가정: 체류 분포 기댓값)"] = st
 def mx(x):
     ev = sorted([(a, 1) for a in x.Gate_In_Time] + [(b, -1) for b in x.Gate_Out_Time]); c = m_ = 0
     for _, k in ev: c += k; m_ = max(m_, c)
@@ -84,13 +86,13 @@ day["적치 침범 지적(가)"] = i[i.grp.str.startswith("가")].groupby("Date"
 day["적치·통로 지적(가+나)"] = inn.groupby("Date").size().reindex(DAYS, fill_value=0)
 day["적치·통로 아차사고"] = nn.groupby("Date").size().reindex(DAYS, fill_value=0)
 print(day.T.rename(columns=lambda c: c[5:]).to_string())
-X = ["D자재 반입", "전체 반입", "B3 적치 물량(가정: 2작업일 체류)", "B2 최대 동시 체류"]; Y = ["B3 지적", "D2 임시적치 지적", "적치 침범 지적(가)", "적치·통로 지적(가+나)", "적치·통로 아차사고"]
+X = ["D자재 반입", "전체 반입", "B3 적치 물량(가정: 체류 분포 기댓값)", "B2 최대 동시 체류"]; Y = ["B3 지적", "D2 임시적치 지적", "적치 침범 지적(가)", "적치·통로 지적(가+나)", "적치·통로 아차사고"]
 print("\n일별 상관계수(스피어만, n=23):"); print(day.corr(method="spearman").loc[Y, X].round(2).to_string())
 h = day["D자재 반입"] >= 2
 print(f"\nD자재 반입 1대 이하인 날 {int((~h).sum())}일 vs 2대 이상인 날 {int(h.sum())}일 — 작업일당 건수:")
 print(pd.DataFrame({"1대 이하": day[~h][Y].mean(), "2대 이상": day[h][Y].mean()}).round(2).to_string())
-print("B3 지적 5건의 날짜:", i[i.Subzone == "B3"].Date.tolist(), "| 그날 B3 적치 물량(가정):", [int(day.loc[x, 'B3 적치 물량(가정: 2작업일 체류)']) for x in i[i.Subzone == 'B3'].Date],
-      "| 10/16 이후 물량 범위:", int(day.loc["2026-10-16":, "B3 적치 물량(가정: 2작업일 체류)"].min()), "~", int(day.loc["2026-10-16":, "B3 적치 물량(가정: 2작업일 체류)"].max()), ", 지적 0건")
+print("B3 지적 5건의 날짜:", i[i.Subzone == "B3"].Date.tolist(), "| 그날 B3 적치 물량(가정):", [int(day.loc[x, 'B3 적치 물량(가정: 체류 분포 기댓값)']) for x in i[i.Subzone == 'B3'].Date],
+      "| 10/16 이후 물량 범위:", int(day.loc["2026-10-16":, "B3 적치 물량(가정: 체류 분포 기댓값)"].min()), "~", int(day.loc["2026-10-16":, "B3 적치 물량(가정: 체류 분포 기댓값)"].max()), ", 지적 0건")
 
 print("\n== [4] B-Flow가 직접 닿는 범위(상한)")
 print("지적:", i.groupby("reach").size().to_dict(), "| 아차사고:", n.groupby("reach").size().to_dict())

@@ -16,31 +16,32 @@
  "THR": 0.6587247152798915,
  "STAT": {
   "B-Flow 전체": {
-   "OPTIMAL": 1742,
-   "INFEASIBLE": 526
+   "OPTIMAL": 1767,
+   "INFEASIBLE": 509
   },
   "전체-②": {
-   "OPTIMAL": 1742,
-   "INFEASIBLE": 526
+   "OPTIMAL": 1767,
+   "INFEASIBLE": 509
   },
   "전체-③": {
-   "OPTIMAL": 2236,
-   "INFEASIBLE": 32
+   "OPTIMAL": 2275,
+   "FEASIBLE": 1
   },
   "전체-④": {
-   "OPTIMAL": 1814,
-   "INFEASIBLE": 464
+   "OPTIMAL": 1823,
+   "INFEASIBLE": 457
   }
  },
  "assumptions": {
-  "GATE": 3,
+  "GATE": 1,
   "LAG": 5,
   "B4_MOVE": 3,
   "REL": 5,
   "STAY": [
    1,
-   2,
-   3
+   1,
+   1,
+   2
   ],
   "B3_AREA": 80,
   "B4_AREA": 200,

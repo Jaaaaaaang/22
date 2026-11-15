@@ -9,17 +9,20 @@ from sklearn.linear_model import PoissonRegressor, LogisticRegression
 warnings.filterwarnings("ignore")
 E = os.environ.get
 DIR = E("BFLOW_DIR", "./data/"); N_RUN = int(E("N_RUN", 5)); SOLVE_SEC = float(E("SOLVE_SEC", 2.0))
-CAP = int(E("CAP", 2)); WINDOW = E("WINDOW", "c01"); QMODE = E("QMODE", "gbr"); GEN = E("GEN", "day"); TAG = E("TAG", "main")
+import assumptions as A0
+CAP = int(E("CAP", A0.CAP)); WINDOW = E("WINDOW", A0.WINDOW); QMODE = E("QMODE", A0.QMODE); GEN = E("GEN", "day"); TAG = E("TAG", "main")
 VAL_REP = int(E("VAL_REP", 300))
 
-# ---------- 가정(데이터에 없는 값) ----------
-P, GATE, END, LAG = float(E("P_COMPLY", 0.8)), 3, 17 * 60, 5   # 알림 준수율, 게이트 통과 분, 하역 마감, 경보 후 지연
-B4_MOVE, REL, STAY = 3, 5, (1, 2, 3)         # B4 이송 분, 불출 작업 분, 적치 일수
-B3_AREA, B4_AREA, LOAD_AREA = 80, 200, 20    # ㎡ (B3·B4 면적, 차량 1대 적치 면적)
-ICE_MIN, HIT, FA = 120, float(E("HIT", 0.8)), 0.05   # 결빙일 양중 제한 분, 예보 적중·오경보
-FL = ("FL-01", "FL-02", "FL-03"); ZC = ("A", "C"); BM = {"A": "1동", "C": "포디움", "D": "2동"}
-PREF = {"A": "FL-01", "C": "FL-03", "D": "FL-02"}      # [수정 2] 10월 구역별 담당 지게차(05번 교차표의 최빈값)
-HOL = {pd.Timestamp("2026-12-25"), pd.Timestamp("2027-01-01")}
+# ---------- 가정: assumptions.py(단일 출처)에서 읽음. 값·근거·범위는 거기와 KPI_SPEC.md에 있음 [v2] ----------
+import assumptions as ASM
+P, GATE, END, LAG = float(E("P_COMPLY", ASM.P_COMPLY)), ASM.GATE, ASM.END, ASM.LAG
+B4_MOVE, REL = ASM.B4_MOVE, ASM.REL
+STAY = tuple(int(x) for x in E("STAY_SET", ",".join(map(str, ASM.STAY))).split(","))   # 민감도용 덮어쓰기
+B3_AREA, B4_AREA, LOAD_AREA = ASM.B3_AREA, ASM.B4_AREA, ASM.LOAD_AREA
+ICE_MIN, HIT, FA = ASM.ICE_MIN, float(E("HIT", ASM.HIT)), ASM.FA
+BETA_TRK = float(E("BETA_TRK", ASM.BETA_TRK))
+FL, PREF, BM = ASM.FL, ASM.PREF, ASM.BM; ZC = ("A", "C")
+HOL = {pd.Timestamp(x) for x in ASM.HOLIDAYS}
 COLS = ["day", "tz", "road", "moved", "iw", "gin", "go", "fl", "held"]
 GC = ["day", "tz", "fl", "pref", "rsv", "rsve", "arr", "ext", "proc", "hand", "unl", "exg", "early", "dn", "u", "z", "stay"]
 rd = lambda x, k=1: {a: (round(float(b), k) if isinstance(b, (int, float, np.integer, np.floating)) else b) for a, b in x.items()}
@@ -62,6 +65,9 @@ for r in d.itertuples():
     pv = d[(d.Date == r.Date) & (d.fl == r.fl) & (d.us < r.us)]; pe = (pv.us + pv.unl).max() if len(pv) else -1
     fw.append(bool(pe > r.gin and r.us - pe <= 2))
 d["fwait"] = fw; d["hand"] = np.where(d.fwait, d.loc[~d.fwait, "iw"].median(), d.iw)
+# [v2 제외 기준] C01(15번) 예약 시작 창 밖(09~11시, 14~16시 이외) 예약 트럭은 분위수 학습·수요 풀에서 제외. 10월 재현(execute)에는 그대로 포함
+d["inwin"] = ((d.rsv >= 540) & (d.rsv <= 660)) | ((d.rsv >= 840) & (d.rsv <= 960)); dc = d[d.inwin].reset_index(drop=True)
+print(f"[05] C01 창 밖 예약 {int((~d.inwin).sum())}건 제외(학습·수요 풀): {d[~d.inwin][['Delivery_ID', 'Date', 'rsv', 'early']].values.tolist()} → 도착 차이 표준편차 {d.early.std():.1f} → {dc.early.std():.1f}분")
 ZONES = sorted(d.tz.unique()); REF = (d.ext + d.iw).mean()
 print(f"[05] 일반 트럭 {n0}건 → 사용 {len(d)}건, 목적지 {ZONES}, 레미콘 일수 {len(REM)}")
 print(f"[05] 도착→입문 {d.ext.mean():.1f}분 = 예약 시작까지 대기 {(d.ext - d.proc).mean():.1f}분 + 게이트 수속 {d.proc.mean():.1f}분(중앙값 {PROC_MED:.0f}분)")
@@ -78,6 +84,9 @@ SW = float(np.mean(sw)) if sw else 0.0
 p11 = pd.read_csv(DIR + "11_work_permits.csv"); pid = find(p11, "Permit_ID", "Permit")
 acc = [c for c in p11.columns if p11[c].astype(str).str.contains("조건부승인").any()][0]
 hh = p11[p11[pid].astype(str).str.startswith("PTW-H")]; QHOT = float((hh[acc].astype(str) == "조건부승인").mean())
+m01 = pd.read_csv(DIR + "01_master_schedule.csv"); hw = m01[m01.Task_Name.astype(str).str.contains(ASM.HOT_KEY)]
+HOT_END = pd.to_datetime(hw.Forecast_Finish.fillna(hw.Planned_Finish)).max()      # [v2] 화기 지연은 화기작업(T018) 종료 예측일까지만
+print(f"[11·01] 화기 지연 적용 기간: ~{HOT_END:%Y-%m-%d}({hw.Task_ID.tolist()} Forecast_Finish)")
 print(f"[02] 강풍 대기 일합계 {HOLDS}, 자재반입 확인 대기 트럭당 {MAT:.2f}분, 대체 전환율 SW={SW:.2f}({int(np.sum(sw))}/{len(sw)}건), [11] 화기 조건부승인율 {QHOT:.2f}({len(hh)}건)")
 
 # ---------- ① 분위수 회귀 ----------
@@ -94,13 +103,13 @@ def predQ(df):
     if QMODE == "const": return np.tile([QC[.1], QC[.5], QC[.9]], (len(df), 1))
     X = feats(df); return np.sort(np.column_stack([QM[q].predict(X) for q in (.1, .5, .9)]), axis=1)
 pin = lambda y, p, q: float(np.mean(np.maximum(q * (y - p), (q - 1) * (y - p))))
-TR = "2026-10-21"; dtr, dte = d[d.Date <= TR], d[d.Date > TR]
+TR = "2026-10-21"; dtr, dte = dc[dc.Date <= TR], dc[dc.Date > TR]
 fitQ(dtr); _qm = QMODE; QMODE = "gbr"; pq = predQ(dte); QMODE = _qm; ye = dte.early.values
 print(f"[① 검증] 10/22~31 {len(dte)}건: 80% 구간 포함률 {np.mean((ye >= pq[:, 0]) & (ye <= pq[:, 2])):.2f}, "
       f"중앙값 MAE {np.abs(ye - pq[:, 1]).mean():.1f}분 vs 평균 대입 {np.abs(ye - dtr.early.mean()).mean():.1f}분 vs 중앙값 대입 {np.abs(ye - dtr.early.median()).mean():.1f}분")
 print("[① 검증] 핀볼손실 q10/q50/q90: 분위수 회귀 " + "/".join(f"{pin(ye, pq[:, i], q):.2f}" for i, q in enumerate((.1, .5, .9)))   # [수정 10] 기준선 비교 추가
       + " vs 입력 없는 상수 분위수 " + "/".join(f"{pin(ye, QC[q], q):.2f}" for q in (.1, .5, .9)) + f"  (모형 사용: {QMODE})")
-fitQ(d)
+fitQ(dc)
 
 # ---------- ③ 위험 점수 ----------
 cam = pd.read_csv(DIR + "04_camera_object_log.csv")
@@ -215,7 +224,7 @@ def day_run(df, cfg, nrel, rem):
         q = predQ(df); df["q10"], df["q50"], df["q90"] = q[:, 0], q[:, 1], q[:, 2]; pl = plan(df, cfg, nrel, rem)
     return execute(df, cfg, nrel, pl), int(cfg["f1"] and not pl)
 
-BASE = dict(name="W0 10월 방식", f1=False, f2=False, f3=False, f4=False, pool=False, bays=3, hand=0)   # 하역 동시 최대 3대(=지게차 수)가 10월 관측 상한
+BASE = dict(name="W0 10월 방식", f1=False, f2=False, f3=False, f4=False, pool=False, bays=ASM.BAYS_W0, hand=0)   # 하역 동시 최대 3대(=지게차 수)가 10월 관측 상한
 d["u"], d["z"], d["stay"] = 1.0, 0.0, 1
 
 # ---------- 10월 재현과 검증 ----------
@@ -232,14 +241,15 @@ L16 = pd.read_csv(DIR + "16_lookahead_90d.csv")
 PW = L16.pivot_table(index=find(L16, "Week"), columns=find(L16, "Building"), values=find(L16, "Planned_Workers", "Worker", "인원"), aggfunc="sum")
 C18 = pd.read_csv(DIR + "18_climate_reference_90d.csv").set_index("Week"); C18["ws"] = pd.to_datetime(C18["Week_Start"]); WEEKS = list(C18.index)
 W45 = sorted(PW.index)[0]; print("16번에 없는 주:", [x for x in WEEKS if x not in PW.index])
-def IDX(wk, z):
+def IDX(wk, z, p=None):
+    p = BETA_TRK if p is None else p
     b = BM.get(z)
-    return 1.0 if b not in PW.columns else PW.loc[wk if wk in PW.index else PW.index[-1], b] / PW.loc[W45, b]
+    return 1.0 if b not in PW.columns else (PW.loc[wk if wk in PW.index else PW.index[-1], b] / PW.loc[W45, b]) ** p   # [v2] 반입 탄력성 β(assumptions.BETA_TRK)
 OPD = {wk: [x for x in (C18.loc[wk, "ws"] + pd.Timedelta(days=i) for i in range(6)) if x not in HOL] for wk in WEEKS}
-LAM0 = "2026-10-14"; LAMD = [x for x in OPD_OCT if x >= LAM0]
+LAM0 = ASM.LAM0; LAMD = [x for x in OPD_OCT if x >= LAM0]
 cnt = d[d.Date >= LAM0].groupby(["Date", "tz"]).size().unstack(fill_value=0).reindex(index=LAMD, columns=ZONES, fill_value=0)
-PAR = {z: (cnt[z].mean(), max(cnt[z].var(ddof=1), 1e-9)) for z in ZONES}; TM = {z: d[d.tz == z].reset_index(drop=True) for z in ZONES}
-DAYS = {x: d[d.Date == x].reset_index(drop=True) for x in LAMD}
+PAR = {z: (cnt[z].mean(), max(cnt[z].var(ddof=1), 1e-9)) for z in ZONES}; TM = {z: dc[dc.tz == z].reset_index(drop=True) for z in ZONES}
+DAYS = {x: dc[dc.Date == x].reset_index(drop=True) for x in LAMD}
 QPOUR = len(REM) / len(OPD_OCT)
 print(f"수요 기준(10/14~31, {len(LAMD)}일): 구역별 일평균 {rd({z: PAR[z][0] for z in ZONES}, 2)}, 분산 {rd({z: PAR[z][1] for z in ZONES}, 2)}, 일 합계 평균 {cnt.sum(1).mean():.2f}·분산 {cnt.sum(1).var(ddof=1):.2f}")
 
@@ -277,11 +287,11 @@ def make_scen(seed):
         def kk(x):
             x = x * n / 7; return min(n, int(x) + int(rng.random() < x - int(x)))
         wd, sn, ic = [set(rng.choice(n, kk(row[c]), replace=False)) for c in ("Expected_Strong_Wind_Days", "Expected_Snow_Days", "Freezing_Days")]
-        sc = (IDX(wk, "A") + IDX(wk, "C")) / 2
+        sc = (IDX(wk, "A", 1.0) + IDX(wk, "C", 1.0)) / 2     # 양중 대기 시간은 계획인원에 비례(β 미적용)
         for i, day in enumerate(days):
             wind = (i in wd) and rng.random() < PH; blocked = wind or (i in sn)
             hold = rng.choice(HOLDS) * sc if blocked else (ICE_MIN * sc if i in ic else 0.0)
-            hot = rng.random() < QHOT; uf = rng.random(); pour = rng.random() < QPOUR; rk = rng.choice(list(REM))
+            hot = bool(rng.random() < QHOT) and day <= HOT_END; uf = rng.random(); pour = rng.random() < QPOUR; rk = rng.choice(list(REM))
             trucks, src = gen_day(day, lambda z, wk=wk: IDX(wk, z), rng)
             rem = list(REM.get(src, [])) if GEN == "day" else (list(REM[rk]) if pour else [])   # 하루 통째 추출이면 그날의 레미콘도 함께
             S.append(dict(day=day, week=wk, blocked=blocked, wind=wind, snow=i in sn, ice=i in ic, hold=hold, hot=hot, uf=uf,
@@ -323,9 +333,9 @@ def agg(R):
                 plan_fail=R.fail.sum(), loads_max=R.loads.max(), over=R.over.sum(), occ=R.occ.max(), blk_days=R.blk.sum(), blockAC=R.blockAC.sum(),
                 fa_defer=R.fa_defer.sum(), hold0=R.hold0.sum(), hold1=R.hold1.sum(), mat=n * MAT * (road + iw) / REF, cold=R.cold.sum(), pour=R.pour.sum())
 
-FULL = {**BASE, "name": "B-Flow 전체", "f1": True, "f2": True, "f3": True, "f4": True, "pool": True, "bays": BASE["bays"] + 1}
+FULL = {**BASE, "name": "B-Flow 전체", "f1": True, "f2": True, "f3": True, "f4": True, "pool": True, "bays": ASM.BAYS_FULL}
 CFGS = {"W0 10월 방식": BASE, "B-Flow 전체": FULL, "전체-①": {**FULL, "name": "전체-①", "f1": False},
-        "전체-②": {**FULL, "name": "전체-②", "f2": False, "pool": False, "bays": BASE["bays"]},
+        "전체-②": {**FULL, "name": "전체-②", "f2": False, "pool": False, "bays": ASM.BAYS_W0},
         "전체-③": {**FULL, "name": "전체-③", "f3": False}, "전체-④": {**FULL, "name": "전체-④", "f4": False}}
 WIN = set(C18.index[C18["ws"] >= pd.Timestamp("2026-12-07")])
 PER = {"90일 전체": lambda R: R, "동절기 전(~W49)": lambda R: R[~R.week.isin(WIN)], "동절기(W50~)": lambda R: R[R.week.isin(WIN)]}

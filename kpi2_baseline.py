@@ -60,7 +60,7 @@ print("양중대장(06) 출발 세부구역:", L.Source_Subzone.value_counts().t
 b3 = dl[dl.Related_Staging_Subzone == "B3"]
 print(f"B3로 들어온 자재: {len(b3)}대(목적지 {b3.Final_Target_Subzone.value_counts().to_dict()}, 품목 {b3.Material_Category.value_counts().to_dict()}), 일평균 {len(b3) / dl.Date.nunique():.2f}대")
 print("→ 입고(05번 B3 관련 반입)는 있으나, 어느 자재가 언제 B3를 떠났는지(불출) 기록이 없어 B3 체류시간은 10월 자료로 산출할 수 없다.")
-print("   (kpi1_baseline.py와 시뮬레이션은 '체류 1~3작업일, 평균 2일'을 가정으로 넣었다. 이 값은 자료에서 나온 것이 아니다)")
+print("   (시뮬레이션은 assumptions.STAY(1·1·1·2작업일, 평균 1.25일)를 가정으로 넣었다. 이 값은 자료에서 나온 것이 아니라 '10월 반입 재생 시 B3 용량 초과가 거의 없을 것'이라는 자료 제약으로 보정한 값이다. check_assumptions.py C5 참고)")
 c4 = pd.read_csv(D + "04_camera_object_log.csv"); cb = c4[c4.Subzone.isin(["B2", "B3"])]
 print("카메라(04) B3: 사람 평균 %.1f명, 지게차 평균 %.2f대, 트럭 0 — 적치량·체류는 찍히지 않음" % (cb[cb.Subzone == "B3"].People_Count.mean(), cb[cb.Subzone == "B3"].Forklift_Count.mean()))
 print("\n== [4] B4: 10월에는 존재하지 않음 (B-Flow 신설 구역). 관련 기록 0건 → 시뮬레이션 값만 가능")
@@ -80,4 +80,4 @@ print("   ※ 이 값은 B3가 아니라 A3·C2·C3(양중 대상)의 값이다.
 
 print("\n== [6] 요약: 10월 기준값을 낼 수 있는가")
 print(pd.DataFrame([["B2", "도착→하역시작 대기, 입문→하역시작 대기, B2 체류", "가능(05번 80대)", f"{g['입문→하역시작'].mean():.1f}분 / {g['도착→하역시작(총 대기)'].mean():.1f}분 / {g['B2 체류(입문→출문)'].mean():.1f}분"],
-                    ["B3", "적치 체류(입고→불출)", "불가(불출 기록 없음)", "가정값(평균 2작업일)만 있음"], ["B4", "적치 체류", "불가(10월에 없음)", "시뮬레이션만 가능"]], columns=["구역", "지표", "10월 실측", "값"]).to_string(index=False))
+                    ["B3", "적치 체류(입고→불출)", "불가(불출 기록 없음)", "가정값(평균 1.25작업일, assumptions A09)만 있음"], ["B4", "적치 체류", "불가(10월에 없음)", "시뮬레이션만 가능"]], columns=["구역", "지표", "10월 실측", "값"]).to_string(index=False))

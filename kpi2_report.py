@@ -3,10 +3,12 @@
 정의
  · B2 대기(분/대) = 장외 대기(road: 안내 도착~입문) + 입문→하역시작(iw). 10월 실측 도착→입문 12.5 + 입문→하역시작 9.2 = 21.7분과 같은 정의.
  · B2 체류(분/대)  = 입문→출문(go - gin). 10월 실측 55.6분.
- · 적치 체류(작업일) = D자재가 하역되어 적치된 날부터 불출되는 날까지. 전: B3(80㎡, 4대분), 후: B4(200㎡, 10대분). ※ 체류일은 시뮬레이션 가정(1~3일 + 화기 승인 지연)에서 나온 값.
+ · 적치 체류(작업일) = D자재가 하역되어 적치된 날부터 불출되는 날까지. 전: B3(80㎡, 4대분), 후: B4(200㎡, 10대분); 면적은 가정(A10). ※ 체류일은 시뮬레이션 가정(assumptions A09, 평균 1.25일 + 화기 승인 지연)에서 나온 값.
  · 적치 점유율(%) = 그날 적치 물량(대) × 20㎡ ÷ 구역 면적. 100% 초과일 = 면적 초과(하역장 점유 증가 위험, 제약 C08)."""
 import glob, os
 import numpy as np, pandas as pd, warnings
+import assumptions as ASM
+from kpi_spec import header
 warnings.filterwarnings("ignore")
 pd.set_option("display.width", 250); pd.set_option("display.max_columns", 40); pd.set_option("display.max_rows", 200)
 TAG = os.environ.get("TAG", "main"); CF = ["W0 10월 방식", "B-Flow 전체"]; NM = {"W0 10월 방식": "전(B2→B3)", "B-Flow 전체": "후(B2→B4)"}
@@ -16,6 +18,7 @@ for x in (d, t, r): x["month"] = x.day.dt.strftime("%Y-%m")
 t["wait"] = t.road + t.iw; t["stay"] = t.go - t.gin
 WEEKS = sorted(d.week.unique(), key=lambda w: d[d.week == w].day.min()); MONTHS = sorted(d.month.unique())
 w0 = {w: d[d.week == w].day.min().strftime("%m/%d") for w in WEEKS}; NRUN = d.run.nunique(); ND = d[(d.run == 0) & (d.config == CF[0])].shape[0]
+print(header("KPI2"))
 print(f"== 자료: 시나리오 {NRUN}개 × 작업일 {ND}일, 방식 {CF}, 태그 {TAG}")
 
 def per(df, key, col, how="mean"):                # run × 기간 값을 만든 뒤 run 간 평균·10%·90%
@@ -70,12 +73,13 @@ cen = d[d.config == CF[0]].groupby("run").loads.last().mean(); print(f"[참고] 
 # ---------------- 가정 민감도 ----------------
 print("\n== [체류일 가정 민감도] (각 30개 시나리오, 시드는 본 실행 앞 30개와 같음)")
 SR = []
-for tg, nm in (("main", "기본 1·2·3일 (본 실행, 앞 30개만)"), ("sens_stay_short", "짧게 1·1·2일"), ("sens_stay_long", "길게 2·3·4일")):
+for tg, nm in (("main", "기본 v2 (1·1·1·2일, 본 실행 앞 30개)"), ("sens_stay_v1", "v1 체류 1·2·3일(10월 재생에서 B3 용량 모순)"), ("sens_stay_long", "길게 2·3·4일"),
+               ("sens_beta_lo", "반입 탄력성 0.33(95% 하한)"), ("sens_beta_hi", "반입 탄력성 1.27(95% 상한)")):
     if not os.path.exists(f"out/kpi2_days_{tg}.csv"): continue
-    dd_ = pd.read_csv(f"out/kpi2_days_{tg}.csv"); rr_ = pd.read_csv(f"out/kpi2_release_{tg}.csv"); dd_ = dd_[dd_.run < 30]; rr_ = rr_[rr_.run < 30]
+    dd_ = pd.read_csv(f"out/kpi2_days_{tg}.csv"); rr_ = pd.read_csv(f"out/kpi2_release_{tg}.csv"); tt_ = pd.read_csv(f"out/kpi2_trucks_{tg}.csv"); dd_ = dd_[dd_.run < 30]; rr_ = rr_[rr_.run < 30]; tt_ = tt_[tt_.run < 30]
     for c in CF:
-        x = rr_[rr_.config == c]; y = dd_[dd_.config == c]
-        SR.append({"가정": nm, "방식": NM[c], "적치 체류 평균(작업일)": round(x.dwell.mean(), 2), "점유율 평균(%)": round(100 * y.occ.mean(), 0), "점유율 최대 평균(%)": round(100 * y.groupby("run").occ.max().mean(), 0),
+        x = rr_[rr_.config == c]; y = dd_[dd_.config == c]; z = tt_[tt_.config == c]
+        SR.append({"가정": nm, "방식": NM[c], "B2 대기(분/대)": round((z.road + z.iw).mean(), 1), "적치 체류 평균(작업일)": round(x.dwell.mean(), 2), "점유율 평균(%)": round(100 * y.occ.mean(), 0), "점유율 최대 평균(%)": round(100 * y.groupby("run").occ.max().mean(), 0),
                    "면적 초과일(76일 중)": round(y.groupby("run").over.sum().mean(), 1)})
 if SR: SR = pd.DataFrame(SR); print(SR.to_string(index=False)); SR.to_csv("out/kpi2_sens_stay.csv", index=False)
 
@@ -95,6 +99,6 @@ def panel(a, metric, title, yl, hline=None, hl_label=None, ylim0=True):
     if ylim0: a.set_ylim(bottom=0)
 panel(ax[0], "B2 대기(분/대)", "B2 하역장: 트럭 1대당 대기 = 장외대기 + 입문 후 하역 시작까지 (평균, 음영 = 시나리오 10~90%)", "분", OCT["total"], f"10월 실측 {OCT['total']}분")
 panel(ax[1], "B2 체류(분/대)", "B2 하역장: 트럭 1대당 체류 (입문→출문)", "분", OCT["b2stay"], f"10월 실측 {OCT['b2stay']}분")
-panel(ax[2], "적치 체류(작업일)", "적치 구역 체류: 하역~불출 (전: B3, 후: B4) — 체류일은 가정(1~3일)에서 나온 값", "작업일")
+panel(ax[2], "적치 체류(작업일)", "적치 구역 체류: 하역~불출 (전: B3, 후: B4) — 체류일은 가정(1·1·1·2일)에서 나온 값", "작업일")
 panel(ax[3], "적치 점유율(%)", "적치 점유율 (전: B3 80㎡, 후: B4 200㎡). 100% 초과 = 면적 초과", "%", 100, "면적 한도")
 fig.tight_layout(); fig.savefig(f"out/kpi2_forecast_{TAG}.png", dpi=130); print(f"\n저장: out/kpi2_forecast_{TAG}.csv|png, out/kpi2_summary_{TAG}.csv, out/kpi2_b2_by_target_{TAG}.csv, out/kpi2_sens_stay.csv")

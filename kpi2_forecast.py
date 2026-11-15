@@ -2,14 +2,13 @@
 bflow_sim.py는 고치지 않고, 그 파일의 앞부분(자료 읽기·수요 생성·하역장 모형·방식 정의)을 그대로 불러온 뒤
 run_policy만 '추적 항목을 더한 사본'으로 바꿔 쓴다. 기존 지표는 out/runs_main.csv와 일치해야 한다(kpi2_check.py로 확인).
 실행: N_RUN=100 TAG=main python3 kpi2_forecast.py > out/kpi2_run_main.txt
-환경변수: N_RUN, TAG, STAY_SET(적치 체류일 후보, 기본 1,2,3 = 시뮬레이션 기본 가정), VAL_REP(수요 생성 검증 반복, 기본 2로 낮춤)
+환경변수: N_RUN, TAG, STAY_SET(적치 체류일 후보, 기본 assumptions.STAY), BETA_TRK, VAL_REP(수요 생성 검증 반복, 기본 2로 낮춤)
 출력: out/kpi2_days_{TAG}.csv(일별), out/kpi2_trucks_{TAG}.csv(트럭별), out/kpi2_release_{TAG}.csv(불출별 체류), out/kpi2_agg_{TAG}.csv(검증용 집계)"""
 import os, sys, time
 os.environ.setdefault("VAL_REP", "2")
 src = open("bflow_sim.py", encoding="utf-8").read()
 cut = src.index("res = {p: {k: [] for k in CFGS} for p in PER}")
 exec(compile(src[:cut], "bflow_sim.py", "exec"), globals())          # 위 문자열 앞까지(자료·모형·방식 정의)만 실행
-STAY = tuple(int(x) for x in E("STAY_SET", "1,2,3").split(","))     # gen_day가 전역 STAY를 읽는다. 난수 개수는 같아 시나리오(트럭·날씨)는 그대로
 print(f"\n[KPI2] 체류일 후보 STAY={STAY}, 적치 면적 B3 {B3_AREA}㎡(={B3_AREA // LOAD_AREA}대) / B4 {B4_AREA}㎡(={B4_AREA // LOAD_AREA}대)")
 
 def run_policy2(S, cfg, run, cname):
