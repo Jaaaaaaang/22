@@ -1,0 +1,35 @@
+[05] 일반 트럭 80건 → 사용 80건, 목적지 ['A', 'C', 'D'], 레미콘 일수 3
+[02] 강풍 대기 일합계 [160 150 240], 자재반입 확인 대기 트럭당 1.75분, 대체 전환율 SW=0.14, [11] 화기 조건부승인율 0.18
+[① 검증] 10/22~31 36건: 80% 구간 포함률 0.78, 중앙값 MAE 8.4분 vs 평균 대입 7.9분
+[③ 검증] B2 슬롯 경보 평균: 예측 0.56 vs 실제 0.34 (경보는 모의 사건이라 보조 점수로만 사용)
+[③] 시간대별 동시 체류 상한: {7: 2, 8: 2, 9: 2, 10: 2, 11: 2, 12: 2, 13: 2, 14: 2, 15: 2, 16: 2}
+[④] 13번 23일, 보류일 4일, 풍속 10 m/s일 때 보류 확률 0.64
+
+[② 10월 재현] hand=0분, bays=2
+  실제 {'road': np.float64(12.4), 'iw': np.float64(9.1), 'd4': 1, 'd3': 2}
+  모형 {'road': np.float64(12.4), 'iw': np.float64(9.8), 'd4': 1, 'd3': 2}
+[② 검증 10/22~31] 실제 {'road': np.float64(12.7), 'iw': np.float64(9.3), 'd4': 1, 'd3': 4} 모형 {'road': np.float64(12.7), 'iw': np.float64(18.5), 'd4': 1, 'd3': 4}
+
+16번 컬럼: ['Lookahead_ID', 'Week', 'Building', 'Area', 'Major_Work', 'Planned_Workers', 'Main_Equipment', 'Primary_Risk', 'Worker_Basis', 'Season_Risk']
+16번에 없는 주: []
+Traceback (most recent call last):
+  File "/home/user/webapp/bflow_sim_original.py", line 275, in <module>
+    R = run_policy(S, cfg, np.random.default_rng(sd))
+  File "/home/user/webapp/bflow_sim_original.py", line 246, in run_policy
+    out = day_run(tr, cfg, nrel, s["rem"], rng)
+  File "/home/user/webapp/bflow_sim_original.py", line 170, in day_run
+    q = predQ(df); df["q10"], df["q50"], df["q90"] = q[:, 0], q[:, 1], q[:, 2]; pl = plan(df, cfg, nrel, rem)
+                                                                                     ~~~~^^^^^^^^^^^^^^^^^^^^
+  File "/home/user/webapp/bflow_sim_original.py", line 154, in plan
+    D.append(m.NewIntervalVar(g, u + ue + ex - g, u + ue + ex, f"D{i}"))
+             ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.13/site-packages/ortools/sat/python/cp_model.py", line 221, in deprecated_func
+    return func(*args, **kwargs)
+  File "/usr/local/lib/python3.13/site-packages/ortools/sat/python/cp_model.py", line 1116, in new_interval_var
+    return self._new_interval_var(name, start, size, end, [])
+           ~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+TypeError: cp_model.new_interval_var: size must be affine or constant.
+
+real	0m6.804s
+user	0m6.304s
+sys	0m0.301s
